@@ -1,0 +1,578 @@
+import { Injectable } from '@angular/core';
+import * as THREE from 'three';
+import { KennyGLBAssetService } from './kenny-glb-asset.service';
+import { TextureManagerService } from './texture-manager.service';
+
+export interface BuildingInfo {
+  id: string;
+  name: string;
+  type: 'factory' | 'power' | 'storage' | 'research' | 'mining' | 'processing';
+  position: { x: number, z: number };
+  description: string;
+  function: string;
+  stats: {
+    capacity?: number;
+    powerGeneration?: number;
+    powerConsumption?: number;
+    outputRate?: number;
+    workers?: number;
+    efficiency?: number;
+  };
+}
+
+export interface RoadNode {
+  x: number;
+  z: number;
+  connections: RoadNode[];
+  roadType: 'straight' | 'intersection' | 'curve' | 'end';
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class WorldGeneratorService {
+  private worldSize = 128;
+  private buildings: BuildingInfo[] = [];
+  private roadNetwork: RoadNode[] = [];
+  
+  constructor(
+    private kennyAssets: KennyGLBAssetService,
+    private textureManager: TextureManagerService
+  ) {}
+
+  async generateIndustrialWorld(scene: THREE.Scene): Promise<void> {
+    console.log(`Generating 128x128 industrial world...`);
+    
+    // Clear existing scene
+    this.clearScene(scene);
+    
+    // Add terrain variation
+    this.addTerrainVariation(scene);
+    
+    // Add resource deposits
+    this.addResourceDeposits(scene);
+    
+    // Generate road network first
+    this.generateRoadNetwork();
+    
+    // Place roads in the scene
+    await this.placeRoads(scene);
+    
+    // Generate and place industrial buildings
+    await this.generateIndustrialBuildings(scene);
+    
+    // Add infrastructure elements
+    await this.addInfrastructure(scene);
+    
+    console.log(`World generation complete: ${this.buildings.length} buildings, ${this.roadNetwork.length} road nodes`);
+  }
+
+  private clearScene(scene: THREE.Scene): void {
+    // Remove all objects except ground and lights
+    const objectsToRemove = scene.children.filter(child => 
+      !(child instanceof THREE.AmbientLight) && 
+      !(child instanceof THREE.DirectionalLight) &&
+      !child.name.includes('ground') &&
+      !child.name.includes('grid')
+    );
+    
+    objectsToRemove.forEach(obj => scene.remove(obj));
+    this.buildings = [];
+    this.roadNetwork = [];
+  }
+
+  private generateRoadNetwork(): void {
+    // Create main arterial roads
+    const mainRoads = [
+      // Horizontal main road through center
+      { start: { x: -60, z: 0 }, end: { x: 60, z: 0 }, type: 'main' },
+      // Vertical main road through center  
+      { start: { x: 0, z: -60 }, end: { x: 0, z: 60 }, type: 'main' },
+      // Secondary roads
+      { start: { x: -60, z: -30 }, end: { x: 60, z: -30 }, type: 'secondary' },
+      { start: { x: -60, z: 30 }, end: { x: 60, z: 30 }, type: 'secondary' },
+      { start: { x: -30, z: -60 }, end: { x: -30, z: 60 }, type: 'secondary' },
+      { start: { x: 30, z: -60 }, end: { x: 30, z: 60 }, type: 'secondary' },
+    ];
+
+    // Generate road nodes from main roads
+    mainRoads.forEach(road => {
+      this.createRoadSegments(road.start, road.end, 10); // 10 unit segments
+    });
+
+    // Add intersections at crossings
+    this.addIntersections();
+  }
+
+  private createRoadSegments(start: {x: number, z: number}, end: {x: number, z: number}, segmentSize: number): void {
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    const segments = Math.floor(distance / segmentSize);
+    
+    for (let i = 0; i <= segments; i++) {
+      const t = i / segments;
+      const x = start.x + dx * t;
+      const z = start.z + dz * t;
+      
+      this.roadNetwork.push({
+        x: Math.round(x / 10) * 10, // Snap to 10-unit grid
+        z: Math.round(z / 10) * 10,
+        connections: [],
+        roadType: 'straight'
+      });
+    }
+  }
+
+  private addIntersections(): void {
+    // Find nodes that share the same position and mark as intersections
+    const positionMap = new Map<string, RoadNode[]>();
+    
+    this.roadNetwork.forEach(node => {
+      const key = `${node.x},${node.z}`;
+      if (!positionMap.has(key)) {
+        positionMap.set(key, []);
+      }
+      positionMap.get(key)!.push(node);
+    });
+
+    // Mark intersections and connect roads
+    positionMap.forEach((nodes, position) => {
+      if (nodes.length > 1) {
+        // This is an intersection
+        const [x, z] = position.split(',').map(Number);
+        nodes.forEach(node => {
+          node.roadType = 'intersection';
+          // Connect to other nodes at same position
+          node.connections = nodes.filter(n => n !== node);
+        });
+      }
+    });
+  }
+
+  private async placeRoads(scene: THREE.Scene): Promise<void> {
+    console.log('Placing road network...');
+    
+    // Group nodes by position to avoid duplicates
+    const uniquePositions = new Map<string, RoadNode>();
+    this.roadNetwork.forEach(node => {
+      const key = `${node.x},${node.z}`;
+      if (!uniquePositions.has(key)) {
+        uniquePositions.set(key, node);
+      }
+    });
+
+    let roadCount = 0;
+    for (const [position, node] of uniquePositions) {
+      try {
+        const roadType = node.roadType === 'intersection' ? 'road-intersection' : 'road-straight';
+        const model = await this.kennyAssets.loadKennyAsset(`roads/${roadType}`);
+        
+        if (model) {
+          model.position.set(node.x, 0, node.z);
+          model.scale.set(2.0, 2.0, 2.0);
+          scene.add(model);
+          roadCount++;
+        }
+      } catch (error) {
+        console.warn(`Could not load road at ${position}:`, error);
+      }
+    }
+    
+    console.log(`Placed ${roadCount} road segments`);
+  }
+
+  private async generateIndustrialBuildings(scene: THREE.Scene): Promise<void> {
+    console.log('Generating industrial buildings...');
+    
+    const industrialZones = [
+      // Heavy Industry Zone (Top-left)
+      { center: { x: -40, z: -40 }, size: 30, type: 'heavy' },
+      // Manufacturing Zone (Top-right)  
+      { center: { x: 40, z: -40 }, size: 30, type: 'manufacturing' },
+      // Processing Zone (Bottom-left)
+      { center: { x: -40, z: 40 }, size: 30, type: 'processing' },
+      // Research & Development Zone (Bottom-right)
+      { center: { x: 40, z: 40 }, size: 30, type: 'research' },
+    ];
+
+    for (const zone of industrialZones) {
+      await this.generateZoneBuildings(scene, zone);
+    }
+  }
+
+  private async generateZoneBuildings(scene: THREE.Scene, zone: any): Promise<void> {
+    const buildingTemplates = this.getBuildingTemplatesForZone(zone.type);
+    const positions = this.generateBuildingPositions(zone.center, zone.size);
+    
+    for (let i = 0; i < Math.min(buildingTemplates.length, positions.length); i++) {
+      const template = buildingTemplates[i];
+      const position = positions[i];
+      
+      try {
+        const model = await this.kennyAssets.loadKennyAsset(template.assetName);
+        if (model) {
+          model.position.set(position.x, 0, position.z);
+          model.scale.set(template.scale, template.scale, template.scale);
+          
+          // Add building label
+          this.addBuildingLabel(model, template.name);
+          
+          scene.add(model);
+          
+          // Store building info
+          this.buildings.push({
+            id: `building_${this.buildings.length}`,
+            name: template.name,
+            type: template.type,
+            position: { x: position.x, z: position.z },
+            description: template.description,
+            function: template.function,
+            stats: template.stats
+          });
+          
+          console.log(`✓ Placed ${template.name} at (${position.x}, ${position.z})`);
+        }
+      } catch (error) {
+        console.warn(`Failed to place ${template.name}:`, error);
+      }
+    }
+  }
+
+  private getBuildingTemplatesForZone(zoneType: string) {
+    const templates = {
+      heavy: [
+        {
+          name: 'Steel Mill Alpha',
+          assetName: 'steel-mill',
+          type: 'processing' as const,
+          scale: 4.0,
+          description: 'Primary steel production facility',
+          function: 'Converts iron ore and coal into steel',
+          stats: { capacity: 1000, powerConsumption: 150, outputRate: 50, workers: 45 }
+        },
+        {
+          name: 'Power Plant Central',
+          assetName: 'power-plant',
+          type: 'power' as const,
+          scale: 4.5,
+          description: 'Main power generation facility',
+          function: 'Generates electricity for the entire complex',
+          stats: { powerGeneration: 500, workers: 25, efficiency: 85 }
+        },
+        {
+          name: 'Heavy Factory Complex',
+          assetName: 'factory-a',
+          type: 'factory' as const,
+          scale: 4.2,
+          description: 'Heavy machinery manufacturing',
+          function: 'Produces industrial equipment and machinery',
+          stats: { capacity: 800, powerConsumption: 120, outputRate: 30, workers: 60 }
+        }
+      ],
+      manufacturing: [
+        {
+          name: 'Assembly Plant Beta',
+          assetName: 'factory-b',
+          type: 'factory' as const,
+          scale: 3.8,
+          description: 'Component assembly facility',
+          function: 'Assembles finished products from components',
+          stats: { capacity: 600, powerConsumption: 90, outputRate: 40, workers: 35 }
+        },
+        {
+          name: 'Main Warehouse',
+          assetName: 'warehouse-a',
+          type: 'storage' as const,
+          scale: 4.0,
+          description: 'Primary storage facility',
+          function: 'Stores raw materials and finished goods',
+          stats: { capacity: 2000, powerConsumption: 20, workers: 15 }
+        },
+        {
+          name: 'Quality Control Center',
+          assetName: 'office-building',
+          type: 'factory' as const,
+          scale: 3.5,
+          description: 'Quality assurance and testing',
+          function: 'Tests and certifies all manufactured products',
+          stats: { powerConsumption: 40, workers: 20, efficiency: 95 }
+        }
+      ],
+      processing: [
+        {
+          name: 'Ore Processing Plant',
+          assetName: 'factory-large',
+          type: 'processing' as const,
+          scale: 4.3,
+          description: 'Raw material processing',
+          function: 'Processes raw ores into usable materials',
+          stats: { capacity: 1200, powerConsumption: 100, outputRate: 60, workers: 40 }
+        },
+        {
+          name: 'Chemical Processing',
+          assetName: 'steel-mill',
+          type: 'processing' as const,
+          scale: 3.9,
+          description: 'Chemical treatment facility',
+          function: 'Applies chemical treatments to materials',
+          stats: { capacity: 800, powerConsumption: 80, outputRate: 35, workers: 30 }
+        }
+      ],
+      research: [
+        {
+          name: 'Research Laboratory',
+          assetName: 'research-lab',
+          type: 'research' as const,
+          scale: 3.7,
+          description: 'Advanced research facility',
+          function: 'Develops new technologies and processes',
+          stats: { powerConsumption: 60, workers: 50, efficiency: 90 }
+        },
+        {
+          name: 'Testing Facility',
+          assetName: 'office-building',
+          type: 'research' as const,
+          scale: 3.3,
+          description: 'Prototype testing center',
+          function: 'Tests new designs and prototypes',
+          stats: { powerConsumption: 45, workers: 25, efficiency: 88 }
+        }
+      ]
+    };
+    
+    return templates[zoneType as keyof typeof templates] || [];
+  }
+
+  private generateBuildingPositions(center: {x: number, z: number}, size: number): {x: number, z: number}[] {
+    const positions = [];
+    const spacing = 25; // Space between buildings
+    const gridSize = Math.floor(size / spacing);
+    
+    for (let i = 0; i < gridSize; i++) {
+      for (let j = 0; j < gridSize; j++) {
+        const x = center.x + (i - gridSize/2) * spacing;
+        const z = center.z + (j - gridSize/2) * spacing;
+        
+        // Avoid placing buildings on roads
+        if (!this.isNearRoad(x, z, 15)) {
+          positions.push({ x, z });
+        }
+      }
+    }
+    
+    return positions;
+  }
+
+  private isNearRoad(x: number, z: number, threshold: number): boolean {
+    return this.roadNetwork.some(node => 
+      Math.abs(node.x - x) < threshold && Math.abs(node.z - z) < threshold
+    );
+  }
+
+  private addBuildingLabel(model: THREE.Group, text: string): void {
+    // Create text sprite for building label
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d')!;
+    canvas.width = 512;
+    canvas.height = 128;
+    
+    context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    
+    context.fillStyle = 'white';
+    context.font = '36px Arial';
+    context.textAlign = 'center';
+    context.fillText(text, canvas.width / 2, canvas.height / 2 + 12);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+    const sprite = new THREE.Sprite(spriteMaterial);
+    
+    sprite.position.set(0, 8, 0); // Position above building
+    sprite.scale.set(10, 2.5, 1);
+    
+    model.add(sprite);
+  }
+
+  private async addInfrastructure(scene: THREE.Scene): Promise<void> {
+    console.log('Adding infrastructure elements...');
+    
+    // Add street lights along main roads
+    const lightPositions = [
+      { x: -50, z: 0 }, { x: -25, z: 0 }, { x: 25, z: 0 }, { x: 50, z: 0 },
+      { x: 0, z: -50 }, { x: 0, z: -25 }, { x: 0, z: 25 }, { x: 0, z: 50 },
+    ];
+    
+    for (const pos of lightPositions) {
+      try {
+        const light = await this.kennyAssets.loadKennyAsset('roads/light-square');
+        if (light) {
+          light.position.set(pos.x, 0, pos.z);
+          light.scale.set(2.5, 2.5, 2.5);
+          scene.add(light);
+        }
+      } catch (error) {
+        console.warn('Could not place street light:', error);
+      }
+    }
+  }
+
+  public getBuildingAt(x: number, z: number, threshold: number = 10): BuildingInfo | null {
+    return this.buildings.find(building => 
+      Math.abs(building.position.x - x) < threshold && 
+      Math.abs(building.position.z - z) < threshold
+    ) || null;
+  }
+
+  public getAllBuildings(): BuildingInfo[] {
+    return [...this.buildings];
+  }
+
+  private addTerrainVariation(scene: THREE.Scene): void {
+    // Add terrain patches for visual variety
+    const patchCount = 20;
+    
+    for (let i = 0; i < patchCount; i++) {
+      const x = (Math.random() - 0.5) * this.worldSize;
+      const z = (Math.random() - 0.5) * this.worldSize;
+      const size = Math.random() * 8 + 4;
+      
+      // Choose terrain type
+      const terrainTypes = ['dirt', 'stone', 'sand'];
+      const terrainType = terrainTypes[Math.floor(Math.random() * terrainTypes.length)];
+      
+      // Create terrain patch
+      const patchGeometry = new THREE.CircleGeometry(size, 8);
+      const patchMaterial = this.textureManager.createTerrainMaterial(terrainType as any);
+      const patch = new THREE.Mesh(patchGeometry, patchMaterial);
+      
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set(x, 0.01, z); // Slightly above ground to prevent z-fighting
+      patch.name = `terrain-${terrainType}-${i}`;
+      
+      scene.add(patch);
+    }
+  }
+
+  private addResourceDeposits(scene: THREE.Scene): void {
+    // Add resource deposits across the map
+    const resourceTypes: ('iron' | 'coal' | 'copper' | 'stone')[] = ['iron', 'coal', 'copper', 'stone'];
+    const depositsPerType = 8;
+    
+    resourceTypes.forEach(resourceType => {
+      for (let i = 0; i < depositsPerType; i++) {
+        // Place away from center and roads
+        let x, z;
+        do {
+          x = (Math.random() - 0.5) * (this.worldSize - 20);
+          z = (Math.random() - 0.5) * (this.worldSize - 20);
+        } while (Math.abs(x % 16) < 4 && Math.abs(z % 16) < 4); // Avoid road areas
+        
+        // Main deposit
+        const depositGeometry = new THREE.CylinderGeometry(3, 4, 1.5, 8);
+        const depositMaterial = this.textureManager.createResourceDepositMaterial(resourceType);
+        const deposit = new THREE.Mesh(depositGeometry, depositMaterial);
+        
+        deposit.position.set(x, 0.75, z);
+        deposit.name = `resource-${resourceType}-${i}`;
+        scene.add(deposit);
+        
+        // Add smaller resource chunks around the deposit
+        for (let j = 0; j < 5; j++) {
+          const chunkX = x + (Math.random() - 0.5) * 8;
+          const chunkZ = z + (Math.random() - 0.5) * 8;
+          
+          const chunkGeometry = new THREE.BoxGeometry(0.8, 0.5, 0.8);
+          const chunkMaterial = this.textureManager.createResourceMaterial(resourceType);
+          const chunk = new THREE.Mesh(chunkGeometry, chunkMaterial);
+          
+          chunk.position.set(chunkX, 0.25, chunkZ);
+          chunk.rotation.y = Math.random() * Math.PI;
+          chunk.name = `resource-chunk-${resourceType}-${i}-${j}`;
+          scene.add(chunk);
+        }
+      }
+    });
+  }
+}
+    const patchSize = 8;
+    const numPatches = Math.floor(this.worldSize / patchSize);
+    
+    for (let x = 0; x < numPatches; x++) {
+      for (let z = 0; z < numPatches; z++) {
+        const worldX = (x - numPatches/2) * patchSize;
+        const worldZ = (z - numPatches/2) * patchSize;
+        
+        // Randomly vary terrain types
+        const rand = Math.random();
+        let terrainType: 'grass' | 'dirt' | 'stone' | 'sand' = 'grass';
+        
+        if (rand < 0.1) terrainType = 'dirt';
+        else if (rand < 0.15) terrainType = 'stone';
+        else if (rand < 0.2) terrainType = 'sand';
+        
+        if (terrainType !== 'grass') {
+          const patchGeometry = new THREE.PlaneGeometry(patchSize, patchSize);
+          const patchMaterial = this.textureManager.createTerrainMaterial(terrainType);
+          const patch = new THREE.Mesh(patchGeometry, patchMaterial);
+          
+          patch.position.set(worldX, 0.01, worldZ); // Slightly above ground
+          patch.rotation.x = -Math.PI / 2;
+          patch.receiveShadow = true;
+          patch.name = `terrain-${terrainType}`;
+          
+          scene.add(patch);
+        }
+      }
+    }
+  }
+
+  private addResourceDeposits(scene: THREE.Scene): void {
+    const resources = ['iron', 'coal', 'copper', 'stone'] as const;
+    const depositsPerType = 8;
+    
+    resources.forEach(resourceType => {
+      for (let i = 0; i < depositsPerType; i++) {
+        // Place deposits away from center where buildings will be
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 30 + Math.random() * 30; // 30-60 units from center
+        
+        const x = Math.cos(angle) * distance;
+        const z = Math.sin(angle) * distance;
+        
+        // Create deposit visual
+        const depositSize = 3 + Math.random() * 2;
+        const depositGeometry = new THREE.BoxGeometry(depositSize, 0.5, depositSize);
+        const depositMaterial = this.textureManager.createResourceDepositMaterial(resourceType);
+        
+        const deposit = new THREE.Mesh(depositGeometry, depositMaterial);
+        deposit.position.set(x, 0.25, z);
+        deposit.name = `resource-${resourceType}-${i}`;
+        deposit.userData = { 
+          type: 'resource_deposit', 
+          resourceType: resourceType,
+          amount: 1000 + Math.random() * 2000 
+        };
+        
+        scene.add(deposit);
+        
+        // Add some scattered resource chunks around the deposit
+        for (let j = 0; j < 5; j++) {
+          const chunkX = x + (Math.random() - 0.5) * depositSize * 2;
+          const chunkZ = z + (Math.random() - 0.5) * depositSize * 2;
+          
+          const chunkGeometry = new THREE.BoxGeometry(0.5, 0.3, 0.5);
+          const chunkMaterial = this.textureManager.createResourceMaterial(resourceType);
+          
+          const chunk = new THREE.Mesh(chunkGeometry, chunkMaterial);
+          chunk.position.set(chunkX, 0.15, chunkZ);
+          chunk.rotation.y = Math.random() * Math.PI;
+          chunk.name = `resource-chunk-${resourceType}`;
+          
+          scene.add(chunk);
+        }
+      }
+    });
+  }
+}

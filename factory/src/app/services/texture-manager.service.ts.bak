@@ -1,0 +1,395 @@
+import { Injectable } from '@angular/core';
+import * as THREE from 'three';
+
+export interface MaterialConfig {
+  name: string;
+  color: string;
+  metalness: number;
+  roughness: number;
+  normalScale?: number;
+  emissive?: string;
+  emissiveIntensity?: number;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class TextureManagerService {
+  private materials: Map<string, THREE.MeshStandardMaterial> = new Map();
+  private textureLoader = new THREE.TextureLoader();
+
+  // Basic material configurations for factory game
+  private materialConfigs: { [key: string]: MaterialConfig } = {
+    // Metals
+    steel: {
+      name: 'Steel',
+      color: '#8A8A8A',
+      metalness: 0.9,
+      roughness: 0.2
+    },
+    iron: {
+      name: 'Iron',
+      color: '#696969',
+      metalness: 0.8,
+      roughness: 0.4
+    },
+    copper: {
+      name: 'Copper',
+      color: '#B87333',
+      metalness: 0.9,
+      roughness: 0.1
+    },
+    aluminum: {
+      name: 'Aluminum',
+      color: '#D3D3D3',
+      metalness: 0.9,
+      roughness: 0.1
+    },
+    
+    // Ground materials
+    grass: {
+      name: 'Grass',
+      color: '#4A7C59',
+      metalness: 0.0,
+      roughness: 0.9
+    },
+    dirt: {
+      name: 'Dirt',
+      color: '#8B4513',
+      metalness: 0.0,
+      roughness: 0.8
+    },
+    sand: {
+      name: 'Sand',
+      color: '#F4A460',
+      metalness: 0.0,
+      roughness: 0.7
+    },
+    
+    // Stone and concrete
+    stone: {
+      name: 'Stone',
+      color: '#696969',
+      metalness: 0.0,
+      roughness: 0.8
+    },
+    concrete: {
+      name: 'Concrete',
+      color: '#A9A9A9',
+      metalness: 0.0,
+      roughness: 0.7
+    },
+    coal: {
+      name: 'Coal',
+      color: '#2F2F2F',
+      metalness: 0.1,
+      roughness: 0.9
+    },
+    
+    // Factory specific
+    industrial_floor: {
+      name: 'Industrial Floor',
+      color: '#5D5D5D',
+      metalness: 0.0,
+      roughness: 0.6
+    },
+    rust: {
+      name: 'Rust',
+      color: '#B22222',
+      metalness: 0.1,
+      roughness: 0.9
+    },
+    chrome: {
+      name: 'Chrome',
+      color: '#C0C0C0',
+      metalness: 1.0,
+      roughness: 0.0
+    }
+  };
+
+  constructor() {
+    this.initializeMaterials();
+  }
+
+  private initializeMaterials(): void {
+    // Create basic materials
+    Object.entries(this.materialConfigs).forEach(([key, config]) => {
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(config.color),
+        metalness: config.metalness,
+        roughness: config.roughness,
+        name: config.name
+      });
+
+      if (config.emissive) {
+        material.emissive = new THREE.Color(config.emissive);
+        material.emissiveIntensity = config.emissiveIntensity || 0.1;
+      }
+
+      this.materials.set(key, material);
+    });
+
+    // Create procedural textures for variety
+    this.createProceduralTextures();
+  }
+
+  private createProceduralTextures(): void {
+    // Create noise textures for materials that benefit from them
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+
+    // Grass texture with noise
+    this.createGrassTexture(ctx, canvas);
+    
+    // Metal texture with scratches
+    this.createMetalTexture(ctx, canvas);
+    
+    // Stone texture with variation
+    this.createStoneTexture(ctx, canvas);
+    
+    // Ground texture with variation
+    this.createGroundTexture(ctx, canvas);
+    
+    // Concrete texture with wear
+    this.createConcreteTexture(ctx, canvas);
+  }
+
+  private createGrassTexture(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const grassMaterial = this.materials.get('grass')!;
+    
+    // Create grass base
+    ctx.fillStyle = '#4A7C59';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Add grass variation
+    for (let i = 0; i < 1000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const shade = Math.random() * 0.3 - 0.15;
+      
+      ctx.fillStyle = `hsl(120, 40%, ${35 + shade * 100}%)`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    
+    const grassTexture = new THREE.CanvasTexture(canvas);
+    grassTexture.wrapS = grassTexture.wrapT = THREE.RepeatWrapping;
+    grassTexture.repeat.set(4, 4);
+    
+    grassMaterial.map = grassTexture;
+    grassMaterial.needsUpdate = true;
+  }
+
+  private createMetalTexture(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const steelMaterial = this.materials.get('steel')!;
+    
+    // Create metal base
+    ctx.fillStyle = '#8A8A8A';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Add scratches and wear
+    ctx.strokeStyle = '#A0A0A0';
+    ctx.lineWidth = 1;
+    
+    for (let i = 0; i < 50; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * 512, Math.random() * 512);
+      ctx.lineTo(Math.random() * 512, Math.random() * 512);
+      ctx.stroke();
+    }
+    
+    const metalTexture = new THREE.CanvasTexture(canvas);
+    metalTexture.wrapS = metalTexture.wrapT = THREE.RepeatWrapping;
+    metalTexture.repeat.set(2, 2);
+    
+    steelMaterial.map = metalTexture;
+    steelMaterial.needsUpdate = true;
+  }
+
+  private createStoneTexture(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const stoneMaterial = this.materials.get('stone')!;
+    
+    // Create stone base
+    ctx.fillStyle = '#696969';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Add stone variation
+    for (let i = 0; i < 2000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const size = Math.random() * 3 + 1;
+      const shade = Math.random() * 0.4 - 0.2;
+      
+      ctx.fillStyle = `hsl(0, 0%, ${50 + shade * 100}%)`;
+      ctx.fillRect(x, y, size, size);
+    }
+    
+    const stoneTexture = new THREE.CanvasTexture(canvas);
+    stoneTexture.wrapS = stoneTexture.wrapT = THREE.RepeatWrapping;
+    stoneTexture.repeat.set(3, 3);
+    
+    stoneMaterial.map = stoneTexture;
+    stoneMaterial.needsUpdate = true;
+  }
+
+  private createGroundTexture(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const dirtMaterial = this.materials.get('dirt')!;
+    
+    // Create dirt base
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Add dirt variation
+    for (let i = 0; i < 1500; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const size = Math.random() * 4 + 1;
+      const shade = Math.random() * 0.3 - 0.15;
+      
+      ctx.fillStyle = `hsl(25, 60%, ${35 + shade * 100}%)`;
+      ctx.fillRect(x, y, size, size);
+    }
+    
+    const dirtTexture = new THREE.CanvasTexture(canvas);
+    dirtTexture.wrapS = dirtTexture.wrapT = THREE.RepeatWrapping;
+    dirtTexture.repeat.set(5, 5);
+    
+    dirtMaterial.map = dirtTexture;
+    dirtMaterial.needsUpdate = true;
+  }
+
+  private createConcreteTexture(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const concreteMaterial = this.materials.get('concrete')!;
+    
+    // Create concrete base
+    ctx.fillStyle = '#A9A9A9';
+    ctx.fillRect(0, 0, 512, 512);
+    
+    // Add concrete variation and wear
+    for (let i = 0; i < 1000; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const size = Math.random() * 3 + 1;
+      const shade = Math.random() * 0.2 - 0.1;
+      
+      ctx.fillStyle = `hsl(0, 0%, ${65 + shade * 100}%)`;
+      ctx.fillRect(x, y, size, size);
+    }
+    
+    // Add some cracks
+    ctx.strokeStyle = '#888888';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 20; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * 512, Math.random() * 512);
+      ctx.lineTo(Math.random() * 512, Math.random() * 512);
+      ctx.stroke();
+    }
+    
+    const concreteTexture = new THREE.CanvasTexture(canvas);
+    concreteTexture.wrapS = concreteTexture.wrapT = THREE.RepeatWrapping;
+    concreteTexture.repeat.set(2, 2);
+    
+    concreteMaterial.map = concreteTexture;
+    concreteMaterial.needsUpdate = true;
+  }
+
+  public getMaterial(name: string): THREE.MeshStandardMaterial {
+    return this.materials.get(name) || this.materials.get('default')!;
+  }
+
+  createTerrainMaterial(terrainType: 'dirt' | 'stone' | 'sand'): THREE.MeshStandardMaterial {
+    const configs = {
+      dirt: { color: '#8B4513', roughness: 0.9, metalness: 0.0 },
+      stone: { color: '#696969', roughness: 0.8, metalness: 0.1 },
+      sand: { color: '#F4A460', roughness: 0.7, metalness: 0.0 }
+    };
+    
+    const config = configs[terrainType];
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(config.color),
+      roughness: config.roughness,
+      metalness: config.metalness,
+      name: `terrain-${terrainType}`
+    });
+  }
+
+  createResourceDepositMaterial(resourceType: 'iron' | 'coal' | 'copper' | 'stone'): THREE.MeshStandardMaterial {
+    const configs = {
+      iron: { color: '#CD853F', roughness: 0.6, metalness: 0.3 },
+      coal: { color: '#2F2F2F', roughness: 0.9, metalness: 0.0 },
+      copper: { color: '#B87333', roughness: 0.4, metalness: 0.7 },
+      stone: { color: '#808080', roughness: 0.8, metalness: 0.1 }
+    };
+    
+    const config = configs[resourceType];
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(config.color),
+      roughness: config.roughness,
+      metalness: config.metalness,
+      name: `deposit-${resourceType}`
+    });
+  }
+
+  createResourceMaterial(resourceType: 'iron' | 'coal' | 'copper' | 'stone'): THREE.MeshStandardMaterial {
+    const configs = {
+      iron: { color: '#C0C0C0', roughness: 0.3, metalness: 0.8 },
+      coal: { color: '#1C1C1C', roughness: 0.9, metalness: 0.0 },
+      copper: { color: '#FFA500', roughness: 0.2, metalness: 0.9 },
+      stone: { color: '#A9A9A9', roughness: 0.7, metalness: 0.2 }
+    };
+    
+    const config = configs[resourceType];
+    return new THREE.MeshStandardMaterial({
+      color: new THREE.Color(config.color),
+      roughness: config.roughness,
+      metalness: config.metalness,
+      name: `resource-${resourceType}`
+    });
+  }
+}
+
+  public getAllMaterialNames(): string[] {
+    return Array.from(this.materials.keys());
+  }
+
+  public createTerrainMaterial(materialType: 'grass' | 'dirt' | 'stone' | 'sand' = 'grass'): THREE.MeshStandardMaterial {
+    return this.getMaterial(materialType);
+  }
+
+  public createBuildingMaterial(materialType: 'steel' | 'concrete' | 'industrial_floor' = 'steel'): THREE.MeshStandardMaterial {
+    return this.getMaterial(materialType);
+  }
+
+  public createResourceMaterial(resourceType: 'iron' | 'coal' | 'copper' | 'stone'): THREE.MeshStandardMaterial {
+    return this.getMaterial(resourceType);
+  }
+
+  // Create a material for resource deposits with glow effect
+  public createResourceDepositMaterial(resourceType: 'iron' | 'coal' | 'copper' | 'stone'): THREE.MeshStandardMaterial {
+    const baseMaterial = this.getMaterial(resourceType);
+    
+    // Add slight emissive glow to make resources more visible
+    switch (resourceType) {
+      case 'iron':
+        baseMaterial.emissive = new THREE.Color(0x404040);
+        baseMaterial.emissiveIntensity = 0.1;
+        break;
+      case 'coal':
+        baseMaterial.emissive = new THREE.Color(0x1a1a1a);
+        baseMaterial.emissiveIntensity = 0.05;
+        break;
+      case 'copper':
+        baseMaterial.emissive = new THREE.Color(0x4a2c1a);
+        baseMaterial.emissiveIntensity = 0.15;
+        break;
+      case 'stone':
+        baseMaterial.emissive = new THREE.Color(0x2a2a2a);
+        baseMaterial.emissiveIntensity = 0.08;
+        break;
+    }
+    
+    return baseMaterial;
+  }
+}
