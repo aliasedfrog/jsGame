@@ -143,7 +143,7 @@ export class WorldGeneratorService {
           // If directions are perpendicular, it's a corner
           const dotProduct = dir1.x * dir2.x + dir1.z * dir2.z;
           if (Math.abs(dotProduct) < 0.1) {
-            roadAssetName = 'road-corner';
+            roadAssetName = 'road-curve';
           }
         }
         
@@ -182,24 +182,154 @@ export class WorldGeneratorService {
   private async generateIndustrialBuildings(scene: THREE.Scene): Promise<void> {
     // Define zones for different building types
     const zones = [
-      { name: 'Heavy Industry', centerX: -30, centerZ: -30, radius: 25, buildingTypes: ['building-sample'] },
-      { name: 'Manufacturing', centerX: 30, centerZ: -30, radius: 20, buildingTypes: ['building-sample'] },
-      { name: 'Processing', centerX: -30, centerZ: 30, radius: 20, buildingTypes: ['building-sample'] },
-      { name: 'Research', centerX: 30, centerZ: 30, radius: 15, buildingTypes: ['building-sample'] }
+      { name: 'Heavy Industry', centerX: -30, centerZ: -30, radius: 25, buildingTypes: ['building-type-a', 'building-type-b', 'building-type-c'] },
+      { name: 'Manufacturing', centerX: 30, centerZ: -30, radius: 20, buildingTypes: ['building-d', 'building-e', 'building-f'] },
+      { name: 'Processing', centerX: -30, centerZ: 30, radius: 20, buildingTypes: ['building-g', 'building-h', 'building-i'] },
+      { name: 'Research', centerX: 30, centerZ: 30, radius: 15, buildingTypes: ['building-skyscraper-a', 'building-skyscraper-b'] }
     ];
 
     const buildingTemplates = {
-      'building-sample': { 
-        name: 'Industrial Building', 
+      'building-type-a': { 
+        name: 'Heavy Factory A', 
         type: 'factory' as const, 
-        description: 'Multi-purpose industrial facility', 
-        function: 'Provides industrial capacity for the complex', 
+        description: 'Large industrial processing facility', 
+        function: 'Processes raw materials into intermediate goods', 
+        stats: { 
+          capacity: 1200, 
+          powerConsumption: 600, 
+          outputRate: 900, 
+          workers: 30, 
+          efficiency: 80 
+        }
+      },
+      'building-type-b': { 
+        name: 'Heavy Factory B', 
+        type: 'factory' as const, 
+        description: 'Heavy machinery production facility', 
+        function: 'Manufactures heavy industrial equipment', 
+        stats: { 
+          capacity: 1000, 
+          powerConsumption: 550, 
+          outputRate: 750, 
+          workers: 28, 
+          efficiency: 85 
+        }
+      },
+      'building-type-c': { 
+        name: 'Heavy Factory C', 
+        type: 'factory' as const, 
+        description: 'Metal smelting and forging complex', 
+        function: 'Smelts ore and forges metal components', 
+        stats: { 
+          capacity: 1500, 
+          powerConsumption: 800, 
+          outputRate: 1000, 
+          workers: 35, 
+          efficiency: 75 
+        }
+      },
+      'building-d': { 
+        name: 'Manufacturing Plant D', 
+        type: 'factory' as const, 
+        description: 'Precision manufacturing facility', 
+        function: 'Produces precision components and parts', 
+        stats: { 
+          capacity: 800, 
+          powerConsumption: 400, 
+          outputRate: 600, 
+          workers: 22, 
+          efficiency: 90 
+        }
+      },
+      'building-e': { 
+        name: 'Manufacturing Plant E', 
+        type: 'factory' as const, 
+        description: 'Assembly and production line facility', 
+        function: 'Assembles complex products from components', 
+        stats: { 
+          capacity: 900, 
+          powerConsumption: 450, 
+          outputRate: 700, 
+          workers: 25, 
+          efficiency: 88 
+        }
+      },
+      'building-f': { 
+        name: 'Manufacturing Plant F', 
+        type: 'factory' as const, 
+        description: 'Quality control and finishing facility', 
+        function: 'Final processing and quality assurance', 
+        stats: { 
+          capacity: 700, 
+          powerConsumption: 350, 
+          outputRate: 550, 
+          workers: 20, 
+          efficiency: 95 
+        }
+      },
+      'building-g': { 
+        name: 'Processing Center G', 
+        type: 'processing' as const, 
+        description: 'Chemical processing facility', 
+        function: 'Processes chemicals and synthetic materials', 
         stats: { 
           capacity: 1000, 
           powerConsumption: 500, 
           outputRate: 800, 
-          workers: 25, 
+          workers: 18, 
+          efficiency: 82 
+        }
+      },
+      'building-h': { 
+        name: 'Processing Center H', 
+        type: 'processing' as const, 
+        description: 'Materials refinement facility', 
+        function: 'Refines raw materials to higher grades', 
+        stats: { 
+          capacity: 1100, 
+          powerConsumption: 520, 
+          outputRate: 850, 
+          workers: 20, 
           efficiency: 85 
+        }
+      },
+      'building-i': { 
+        name: 'Processing Center I', 
+        type: 'processing' as const, 
+        description: 'Advanced materials processing', 
+        function: 'Creates advanced composite materials', 
+        stats: { 
+          capacity: 900, 
+          powerConsumption: 480, 
+          outputRate: 720, 
+          workers: 16, 
+          efficiency: 88 
+        }
+      },
+      'building-skyscraper-a': { 
+        name: 'Research Tower A', 
+        type: 'research' as const, 
+        description: 'Advanced research and development facility', 
+        function: 'Conducts cutting-edge industrial research', 
+        stats: { 
+          capacity: 500, 
+          powerConsumption: 300, 
+          outputRate: 200, 
+          workers: 45, 
+          efficiency: 95 
+        }
+      },
+      'building-skyscraper-b': { 
+        name: 'Research Tower B', 
+        type: 'research' as const, 
+        description: 'Innovation and technology center', 
+        function: 'Develops new technologies and processes', 
+        stats: { 
+          capacity: 600, 
+          powerConsumption: 350, 
+          outputRate: 250, 
+          workers: 50, 
+          efficiency: 92 
         }
       }
     };

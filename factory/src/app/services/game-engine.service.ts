@@ -74,56 +74,53 @@ export class GameEngineService {
     this.camera.lookAt(0, 0, 0);
     this.camera.rotation.x = -Math.PI / 6; // 30-degree tilt for ARPG feel
 
-    // Add enhanced lighting for better visibility
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Bright white ambient
+    // Simple, aggressive lighting setup for debugging
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.3); // Very dim ambient
     this.scene.add(ambientLight);
+    console.log('Added ambient light:', ambientLight);
 
-    // Main directional light - positioned high above center, pointing down
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight.position.set(0, 200, 0); // Directly above center
-    directionalLight.target.position.set(0, 0, 0); // Point at world center
-    directionalLight.castShadow = true;
-    
-    // Configure shadow camera to cover the entire 256x256 ground plane
-    directionalLight.shadow.camera.left = -150;
-    directionalLight.shadow.camera.right = 150;
-    directionalLight.shadow.camera.top = 150;
-    directionalLight.shadow.camera.bottom = -150;
-    directionalLight.shadow.camera.near = 50;
-    directionalLight.shadow.camera.far = 300;
-    directionalLight.shadow.mapSize.width = 2048;
-    directionalLight.shadow.mapSize.height = 2048;
+    // Single, very bright directional light from directly overhead
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0); // Very bright
+    directionalLight.position.set(0, 300, 0); // High above center
+    directionalLight.target.position.set(0, 0, 0); // Point at center
+    directionalLight.castShadow = false; // Disable shadows for now to simplify
     
     this.scene.add(directionalLight);
-    this.scene.add(directionalLight.target); // Important: add the target to scene
+    this.scene.add(directionalLight.target);
+    console.log('Added directional light:', directionalLight);
+    console.log('Light position:', directionalLight.position);
+    console.log('Light intensity:', directionalLight.intensity);
 
-    // Add helper to visualize the directional light (can be removed later)
-    // const helper = new THREE.DirectionalLightHelper(directionalLight, 20);
-    // this.scene.add(helper);
+    // Add helper to see where the light is
+    const helper = new THREE.DirectionalLightHelper(directionalLight, 50, 0xff0000);
+    this.scene.add(helper);
+    console.log('Added light helper:', helper);
 
-    // Add angled directional light for more natural lighting
-    const angleLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    angleLight.position.set(100, 150, 100); // Angled from corner
-    angleLight.target.position.set(0, 0, 0);
-    this.scene.add(angleLight);
-    this.scene.add(angleLight.target);
+    // Log scene contents to verify lights are added
+    console.log('Scene children count:', this.scene.children.length);
+    console.log('Scene children:', this.scene.children.map(child => child.constructor.name));
 
-    // Add fill light from opposite corner
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-    fillLight.position.set(-100, 120, -100);
-    fillLight.target.position.set(0, 0, 0);
-    this.scene.add(fillLight);
-    this.scene.add(fillLight.target);
+    // Add a bright test cube to verify rendering is working
+    const testGeometry = new THREE.BoxGeometry(10, 10, 10);
+    const testMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Bright red, unaffected by lighting
+    const testCube = new THREE.Mesh(testGeometry, testMaterial);
+    testCube.position.set(0, 5, 0);
+    this.scene.add(testCube);
+    console.log('Added bright red test cube at origin');
 
-    console.log('Enhanced lighting added: ambient + 3 directional lights covering full world');
-    console.log('Main light position:', directionalLight.position);
-    console.log('Main light target:', directionalLight.target.position);
-    console.log('Shadow camera bounds:', {
-      left: directionalLight.shadow.camera.left,
-      right: directionalLight.shadow.camera.right,
-      top: directionalLight.shadow.camera.top,
-      bottom: directionalLight.shadow.camera.bottom
+    // Add an emissive test cube for comparison
+    const emissiveGeometry = new THREE.BoxGeometry(8, 8, 8);
+    const emissiveMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0x00ff00,
+      emissive: 0x002200,
+      emissiveIntensity: 0.8
     });
+    const emissiveCube = new THREE.Mesh(emissiveGeometry, emissiveMaterial);
+    emissiveCube.position.set(20, 5, 0);
+    this.scene.add(emissiveCube);
+    console.log('Added bright green emissive test cube');
+
+    console.log('SIMPLIFIED lighting: dim ambient + bright overhead directional');
 
     // Create ground grid
     this.createGroundGrid();
@@ -143,8 +140,16 @@ export class GameEngineService {
     
     console.log('Setting renderer size to:', width, 'x', height);
     this.renderer.setSize(width, height);
+    
+    // Enable proper lighting and color output
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+    
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    
+    console.log('Renderer configured with proper color space and tone mapping');
 
     // Update camera aspect ratio for orthographic camera
     if (this.camera instanceof THREE.OrthographicCamera) {

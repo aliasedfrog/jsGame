@@ -39,9 +39,9 @@ export class KennyGLBAssetService {
     { name: 'restaurant', path: 'assets/models/commercial/restaurant.glb', type: 'building', description: 'Restaurant' },
     
     // Roads (from roads kenny pack)
-    { name: 'road-straight', path: 'assets/models/roads/road-straight.glb', type: 'prop', description: 'Straight Road' },
-    { name: 'road-corner', path: 'assets/models/roads/road-corner.glb', type: 'prop', description: 'Road Corner' },
-    { name: 'road-intersection', path: 'assets/models/roads/road-intersection.glb', type: 'prop', description: 'Road Intersection' },
+    { name: 'road-straight', path: 'assets/models/roads/glb/road-straight.glb', type: 'prop', description: 'Straight Road' },
+    { name: 'road-curve', path: 'assets/models/roads/glb/road-curve.glb', type: 'prop', description: 'Road Curve' },
+    { name: 'road-intersection', path: 'assets/models/roads/glb/road-intersection.glb', type: 'prop', description: 'Road Intersection' },
     
     // Suburban elements (from suburban kenny pack)
     { name: 'house-a', path: 'assets/models/suburban/house-a.glb', type: 'building', description: 'House A' },
